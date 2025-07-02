@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{ machine.name }}</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="/static/script.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+
+  <style>
+    #main {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 20px;
+      padding: 10px;
+    }
+    .left-panel, .right-panel {
+      flex: 1;
+      min-width: 300px;
+    }
+    .right-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .right-panel > h3,
+    .right-panel > canvas,
+    #console-section {
+      margin-bottom: 1em;
+    }
+    #console-section {
+      flex: 1;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <!-- LOADER OVERLAY -->
+  <div id="loader-overlay">
+    <div id="loader-text">Connecting to {{ request.host }}</div>
+    <div class="loader-bar"><div id="loader-progress"></div></div>
+  </div>
+  <!-- FAULT OVERLAY -->
+  <div id="fault-overlay" class="hidden">
+    <div id="fault-box">
+      <h2>Error</h2>
+      <p id="fault-reason" style="color: red; font-weight: bold; margin-top: 1em;"></p>
+      <p>Thermistor Fault Triggered.<br>
+        Main board has been shut down.<br>
+        You should turn the device off and diagnose the issue before turning it back on.</p>
+      <div class="fault-buttons">
+        <button onclick="restartFirmware()">Restart Firmware</button>
+        <button onclick="restartHost()">Restart Host</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN UI -->
+  <div id="main-ui" class="hidden">
+    <!-- Sidebar / status-bar -->
+    <div id="status-bar">
+      <h2>{{ machine.name }}</h2>
+      <p><strong>Controller:</strong> {{ machine.controller }}</p>
+      <p><strong>Status:</strong> <span id="machine-status">{{ status.state }}</span></p>
+      <hr />
+      <p><strong>Temp Range:</strong> {{ machine.min_temp }}°C–{{ machine.max_temp }}°C</p>
+      <p><strong>Plate:</strong> {{ machine.plate_type|capitalize }} {{ machine.duty_cycle }}W @ {{ machine.voltage }}V</p>
+      <p><strong>Zones:</strong> {{ machine.zones }} | <strong>Fan:</strong> {{ 'Yes' if machine.fan_enabled else 'No' }}</p>
+      <hr />
+      <p><strong>Plate Temp:</strong> <span id="current-temp">{{ status.current_temp }} °C</span></p>
+      <p><strong>Target Temp:</strong> <span id="target-temp">{{ status.target_temp }} °C</span></p>
+      <p><strong>Power:</strong> <span id="power-level">{{ status.duty_cycle }} %</span></p>
+      <p><strong>PWM:</strong> <span id="pwm-value">{{ status.pwm }}</span></p>
+      <p><strong>Lid Temp:</strong> <span id="lid-temp">{{ status.lid_temp }} °C</span></p>
+      <p><strong>Interior Humidity:</strong> <span id="interior-humid">{{ status.humidity }} %</span></p>
+      <p><strong>Step:</strong> <span id="current-step">{{ status.current_step }}</span></p>
+      <hr />
+    </div>
+
+    <!-- Side-tab nav -->
+    <div id="side-tab">
+      <div class="tab-item" id="machine-tab-button" title="Machine Settings">
+        <img src="/static/images/wrench.png" alt="Machine Settings" />
+      </div>
+      <div class="tab-item" id="axis-tab-button" title="Axis Control">
+        <img src="/static/images/axis.png" alt="Axis Control" />
+      </div>
+      <div class="tab-item" id="profiles-tab-button" title="Solder Profiles">
+        <img src="/static/images/profiles.png" alt="Solder Profiles" />
+      </div>
+    </div>
+
+    <!-- Main panels -->
+    <div id="main">
+      <!-- LEFT PANEL -->
+      <div class="left-panel">
+        <h3 style="margin-top: 10px;">Commands</h3>
+        <button class="small-btn" onclick="restartFirmware()">Restart Infernic</button>
+        <button class="small-btn" onclick="restartHost()">Restart Host</button>
+        <h3>Set Plate Temperature</h3>
+        <p><strong>Plate Temp:</strong> <span id="current-temp-2">{{ current_temp_value }} °C</span></p>
+        <p><strong>Target Temp:</strong> <span id="target-temp-2">{{ target_temp_value }} °C</span></p>
+        <input type="number" id="temp-input" placeholder="0" />
+        <!-- Cameras section -->
+        <div class="section">
+          <div class="section-header" id="camera-toggle" style="display:flex;justify-content:space-between;align-items:center;">
+            <h3 style="margin: 0;">Cameras <span id="camera-arrow">▼</span></h3>
+            <input type="range" id="zoom-slider" min="1" max="4" step="0.1" value="1" style="display:none;width:100px;opacity:0.8;" />
+          </div>
+          <div id="camera-section" class="section-content" style="display:none;">
+            <div id="camera-container" style="position:relative;display:inline-block;width:640px;height:480px;overflow:hidden;">
+              <img id="camera-feed" src="/camera_feed" width="640" height="480" alt="Live Camera Feed" style="display:block;" />
+              <label id="crosshair-label" style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.4);color:white;padding:4px;border-radius:4px;display:none;">
+                <input type="checkbox" id="crosshair-toggle" /> Crosshair
+              </label>
+            </div>
+            <script>
+              const cameraContainer = document.getElementById("camera-container");
+              const crosshairToggle = document.getElementById("crosshair-toggle");
+              const cameraFeed = document.getElementById("camera-feed");
+              const crosshairLabel = document.getElementById("crosshair-label");
+              const zoomSlider = document.getElementById("zoom-slider");
+              const crosshairGuiEnabled = {{ 'true' if machine.get('camera',{}).get('crosshair_gui_enabled',False) else 'false' }};
+              let crosshairEnabled = {{ 'true' if machine.get('camera',{}).get('crosshair_enabled',False) else 'false' }};
+              const zoomGuiEnabled = {{ 'true' if machine.get('camera',{}).get('zoom_gui_enabled',True) else 'false' }};
+              function updateCameraFeed() {
+                const crosshairParam = crosshairEnabled ? '1' : '0';
+                cameraFeed.src = `/camera_feed?crosshair=${crosshairParam}&_=${Date.now()}`;
+              }
+              function updateZoom() {
+                cameraFeed.style.transform = `scale(${zoomSlider.value})`;
+                cameraFeed.style.transformOrigin = 'center center';
+              }
+              if (crosshairGuiEnabled) {
+                crosshairLabel.style.display = "block";
+                crosshairToggle.checked = crosshairEnabled;
+                crosshairToggle.addEventListener("change", () => {
+                  crosshairEnabled = crosshairToggle.checked;
+                  updateCameraFeed();
+                });
+              }
+              if (zoomGuiEnabled) {
+                zoomSlider.style.display = "inline-block";
+                cameraContainer.style.overflow = "hidden";
+                zoomSlider.addEventListener("input", updateZoom);
+                updateZoom();
+              }
+              updateCameraFeed();
+            </script>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT PANEL -->
+      <div class="right-panel">
+        <!-- Chart Section -->
+        <div id="chart-section">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3>Temperature Graph</h3>
+            <button id="toggle-chart-btn" class="small-btn toggle-chart-btn">
+              <span id="chart-arrow" class="arrow">▼</span>
+            </button>
+          </div>
+          <div id="temp-chart-parent" class="chart-container" style="position: relative; width: 600px;">
+            <canvas id="temp-chart"></canvas>
+            <button id="fullscreen-btn" style="position: absolute; top: 10px; right: 10px; z-index: 10; background: rgba(255, 255, 255, 0.8); border: 1px solid #ccc; border-radius: 4px; padding: 5px 10px; cursor: pointer;" title="Toggle Fullscreen">⛶</button>
+          </div>
+        </div>
+        <!-- Console Section -->
+        <div id="console-section" style="margin-top: 30px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3>Command Console</h3>
+            <button id="toggle-console-btn" class="small-btn toggle-console-btn">
+              <span id="console-arrow" class="arrow">▼</span>
+            </button>
+          </div>
+          <div id="console-content" style="display: flex; flex-direction: column; gap: 6px; max-width: 600px;">
+            <input type="text" id="console-input" placeholder="Send M115 to list all commands! (e.g. M115)" style="padding: 6px; font-family: monospace;" />
+            <button class="small-btn" onclick="sendConsoleCommand()">Send</button>
+            <pre id="console-output" style="background: #111; padding: 10px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; font-family: monospace;"></pre>
+          </div>
+        </div>
+        <!-- Solder Profile Info -->
+        <div class="solder-info-bar">
+          <h3 style="margin-top: 10px;">Selected Profile</h3>
+          <button class="small-btn" onclick="openProfilesTab()">{{ selected_profile }}</button>
+        </div>
+        <!-- Macros Section -->
+        <div class="Macros-bar">
+          <h3 style="margin-top: 10px;">Macros</h3>
+          <button class="small-btn" onclick="AddMacro()">Add Macro</button>
+          <button class="small-btn" onclick="executeQueue()">Run Macros</button>
+        </div>
+        <!-- Machine Tab Content -->
+        <div id="tab-content" class="tab-content hidden">
+          <div class="tab-header">
+            <span class="tab-title">Machine Settings</span>
+            <button id="machine-close-btn">×</button>
+            <img src="/static/images/machine_image.png" alt="Machine Image" class="machine-image" />
+          </div>
+          <div class="tab-body">
+            <ul id="config-file-list"></ul>
+          </div>
+        </div>
+       <!-- Axis Control Tab Content -->
+<div id="axis-content" class="tab-content hidden">
+  <div class="tab-header">
+    <span class="tab-title">Axis Control</span>
+    <button id="axis-close-btn">×</button>
+  </div>
+  <div class="tab-body">
+    <div style="display: flex; align-items: center; margin-top: 30px;">
+      <h3 style="margin: 0;">Jog Axis</h3>
+      <span id="current-z-pos" style="margin-left: auto;">Z: 0.00 mm</span>
+    </div>
+    <div id="jog-axis" style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; gap: 8px;">
+        <!-- Upward movement (positive values) -->
+        <button class="jog-button" onclick="moveAxis(10)">+10</button>
+        <button class="jog-button" onclick="moveAxis(5)">+5</button>
+        <button class="jog-button" onclick="moveAxis(2.5)">+2.5</button>
+        <button class="jog-button" onclick="moveAxis(1)">+1</button>
+        <button class="jog-button" onclick="moveAxis(0.5)">+0.5</button>
+        <button class="jog-button" onclick="moveAxis(0.1)">+0.1</button>
+        <button class="jog-button" onclick="moveAxis(0.01)">+0.01</button>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <!-- Downward movement (negative values) -->
+        <button class="jog-button" onclick="moveAxis(-10)">-10</button>
+        <button class="jog-button" onclick="moveAxis(-5)">-5</button>
+        <button class="jog-button" onclick="moveAxis(-2.5)">-2.5</button>
+        <button class="jog-button" onclick="moveAxis(-1)">-1</button>
+        <button class="jog-button" onclick="moveAxis(-0.5)">-0.5</button>
+        <button class="jog-button" onclick="moveAxis(-0.1)">-0.1</button>
+        <button class="jog-button" onclick="moveAxis(-0.01)">-0.01</button>
+      </div>
+    </div>
+    <hr />
+    <div id="model-container" style="position: relative; width: 100%; height: 400px;"></div>
+  </div>
+</div>
+
+        <!-- Config Editor -->
+        <div id="editor-overlay" class="editor-overlay hidden">
+          <div id="editor-bg"></div>
+          <div id="editor-container">
+            <h3 id="editor-filename"></h3>
+            <textarea id="editor-text"></textarea>
+            <div class="editor-buttons">
+              <button onclick="saveFile()">Save</button>
+              <button onclick="deleteFile()">Delete</button>
+              <button id="editor-close-btn">Close</button>
+            </div>
+          </div>
+        </div>
+        <!-- Profiles Tab Content -->
+        <div id="profiles-content" class="tab-content hidden">
+          <div class="tab-header">
+            <span class="tab-title">Solder Profiles</span>
+            <button id="profiles-close-btn">×</button>
+          </div>
+          <div class="tab-body">
+            <ul id="profile-file-list"></ul>
+          </div>
+        </div>
+        <!-- Profile Editor -->
+        <div id="profile-editor-overlay" class="editor-overlay hidden">
+          <div id="editor-bg"></div>
+          <div id="editor-container">
+            <h3 id="profile-editor-filename"></h3>
+            <label for="profile-editor-icon-file">Icon:</label>
+            <input type="file" id="profile-editor-icon-file" accept="image/png, image/jpeg" /><br />
+            <input type="hidden" id="profile-editor-icon" />
+            <img id="profile-icon-preview" src="" alt="Preview" style="max-height:64px;margin:5px 0" /><br />
+            <label for="profile-editor-name">Profile Name</label>
+            <input type="text" id="profile-editor-name" placeholder="e.g. Sn63Pb37" />
+            <label for="profile-editor-composition">Composition</label>
+            <input type="text" id="profile-editor-composition" placeholder="e.g. 33%Tin, 53%Lead" />
+            <label for="profile-editor-molten">Molten Temp (°C)</label>
+            <input type="number" id="profile-editor-molten" placeholder="e.g. 183" />
+            <label for="profile-editor-solid">Solid Temp (°C)</label>
+            <input type="number" id="profile-editor-solid" placeholder="e.g. 138" />
+            <label for="profile-editor-peak">Peak Temp (°C)</label>
+            <input type="number" id="profile-editor-peak" />
+            <label for="profile-editor-preheat">Preheat Time (s)</label>
+            <input type="number" id="profile-editor-preheat" />
+            <label for="profile-editor-soak">Soak Time (s)</label>
+            <input type="number" id="profile-editor-soak" />
+            <label for="profile-editor-reflow">Reflow Time (s)</label>
+            <input type="number" id="profile-editor-reflow" />
+            <label for="profile-editor-cool">Cool Time (s)</label>
+            <input type="number" id="profile-editor-cool" />
+            <div class="editor-buttons">
+              <button onclick="saveProfile()">Save</button>
+              <button onclick="deleteProfile()">Delete</button>
+              <button id="profile-editor-close-btn">Close</button>
+            </div>
+          </div>
+        </div>
+        <!-- Macro Editor Overlay -->
+        <div id="macro-editor-overlay" class="editor-overlay hidden">
+          <div id="editor-bg"></div>
+          <div id="editor-container">
+            <h3>Add Macro</h3>
+            <input type="text" id="macro-input" placeholder="Enter G-code (e.g., G1 Z10;G1 Z5)" />
+            <div class="editor-buttons">
+              <button class="small-btn" onclick="submitMacro()">Add</button>
+              <button class="small-btn" onclick="cancelMacro()">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

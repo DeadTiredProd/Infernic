@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{ machine.name }} (Touch)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="{{ url_for('static', filename='touch.css') }}" />
+  <style>
+    .hidden { display: none !important; }
+
+    .touch-container {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      background: #121212;
+      color: #fff;
+      box-sizing: border-box;
+      padding-top: 48px; /* reserve for tab bar */
+    }
+
+    /* Tab bar */
+    .tab-bar {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      display: flex;
+      background: #1e1e1e;
+      z-index: 10;
+    }
+    .tab-bar button {
+      flex: 1;
+      padding: 12px 0;
+      background: #333;
+      color: #fff;
+      border: none;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .tab-bar button img {
+      height: 1em;
+    }
+    .tab-bar button.active {
+      background: #E53935;
+    }
+
+    /* Panels fill below tab bar */
+    .tab-content {
+      position: absolute;
+      top: 48px; left: 0;
+      width: 100%; height: calc(100% - 48px);
+      overflow-y: auto;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    /* Camera view full-screen */
+    #camera-feed {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .camera-close-btn {
+      position: absolute;
+      top: 56px;    /* below tab bar */
+      left: 8px;
+      z-index: 20;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      border: none;
+      font-size: 1.6rem;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .camera-close-btn:active {
+      background: rgba(0,0,0,0.8);
+    }
+
+    /* Dashboard buttons & layout */
+    .temps {
+      display: flex;
+      justify-content: space-around;
+      margin-bottom: 1em;
+    }
+    .temp-block { text-align: center; }
+    .set-temp {
+      display: flex;
+      margin-bottom: 1em;
+    }
+    .set-temp input {
+      flex: 1;
+      padding: 8px;
+      font-size: 1rem;
+    }
+    .set-temp button {
+      margin-left: 8px;
+      padding: 8px 16px;
+    }
+    .actions {
+      display: flex;
+      margin-top: 1em;
+    }
+    .big-btn {
+      flex: 1;
+      margin: 0 4px;
+      padding: 14px 0;
+      font-size: 1.2rem;
+      background: #E53935;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    /* Settings panel styles */
+    .settings-item {
+      margin-bottom: 1em;
+    }
+    .settings-item label {
+      display: block;
+      margin-bottom: 0.5em;
+      font-weight: bold;
+    }
+
+    /* Screensaver overlay */
+    #screensaver {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: black;
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+      overflow: hidden;
+      z-index: 9999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease-in-out;
+    }
+    #screensaver.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+    #screensaver img {
+      height: 100px;
+      animation: scroll-left 20s linear infinite;
+    }
+    @keyframes scroll-left {
+      from { transform: translateX(-13%); }
+      to   { transform: translateX(100%); }
+    }
+  </style>
+</head>
+<body>
+  <div class="touch-container">
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <button id="tab-dashboard" class="active" onclick="showTab('dashboard')">Dashboard</button>
+      <button id="tab-camera" onclick="showTab('camera')">Camera</button>
+      <button id="tab-settings" onclick="showTab('settings')">
+        <img src="{{ url_for('static', filename='images/wrench.png') }}" alt="Settings">
+        Settings
+      </button>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="tab-content">
+      <h2>{{ machine.name }}</h2>
+      <div class="temps">
+        <div class="temp-block">
+          <div class="label">Current</div>
+          <div id="current-temp" class="value">{{ current_temp_value }}°C</div>
+        </div>
+        <div class="temp-block">
+          <div class="label">Target</div>
+          <div id="target-temp" class="value">{{ target_temp_value }}°C</div>
+        </div>
+      </div>
+      <div class="set-temp">
+        <input type="number" id="temp-input" placeholder="Set °C" />
+        <button onclick="setTemp()">Set</button>
+      </div>
+      <div class="actions">
+        <button class="big-btn" onclick="startJob()">Start</button>
+        <button class="big-btn" onclick="stopJob()">Stop</button>
+      </div>
+    </div>
+
+    <!-- Camera -->
+    <div id="camera" class="tab-content hidden">
+      <button class="camera-close-btn" onclick="showTab('dashboard')">×</button>
+      <img id="camera-feed" src="/camera_feed" alt="Live camera feed" />
+    </div>
+
+    <!-- Settings -->
+    <div id="settings" class="tab-content hidden">
+      <h2>Settings</h2>
+      <div class="settings-item">
+      <label for="opt-example">Buzzer enabled:</label>
+     <input type="checkbox" id="opt-example" />
+     </div>
+
+    </div>
+  </div>
+
+  <!-- Screensaver -->
+  <div id="screensaver" onclick="hideScreensaver()">
+    <img
+      src="{{ url_for('static', filename='images/HellfireMade_screensaver.png') }}"
+      alt="Screensaver"
+      style="
+        position: absolute;
+        top: 0; left: 0;
+        width: 100vw;
+        height: 100vh;
+        object-fit: cover;
+        animation: scroll-left 120s linear infinite;
+      "
+    />
+  </div>
+
+  <script>
+    // Tab switching
+    function showTab(name) {
+      ['dashboard','camera','settings'].forEach(id =>
+        document.getElementById(id).classList.add('hidden')
+      );
+      ['dashboard','camera','settings'].forEach(id =>
+        document.getElementById('tab-'+id).classList.remove('active')
+      );
+      document.getElementById(name).classList.remove('hidden');
+      document.getElementById('tab-'+name).classList.add('active');
+    }
+
+    // Send temp command
+    async function setTemp() {
+      const v = document.getElementById('temp-input').value;
+      if (!v) return;
+      await fetch('/api/send-command', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({command:`M113 S${v}`})
+      });
+      document.getElementById('target-temp').textContent = `${parseFloat(v).toFixed(1)}°C`;
+      document.getElementById('temp-input').value = '';
+    }
+
+    function startJob() {
+      fetch('/api/send-command', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({command:'G010'})
+      });
+    }
+    function stopJob() {
+      fetch('/api/send-command', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({command:'G011'})
+      });
+      document.getElementById('target-temp').textContent = '0.0°C';
+    }
+
+    // Poll current temperature every 2 s
+    setInterval(async ()=>{
+      try {
+        const r = await fetch('/api/status');
+        if (!r.ok) return;
+        const js = await r.json();
+        document.getElementById('current-temp').textContent = js.current_temp + '°C';
+      } catch {}
+    }, 2000);
+
+    // Screensaver inactivity
+    let inactivityTimer;
+    function resetInactivity() {
+      clearTimeout(inactivityTimer);
+      hideScreensaver();
+      inactivityTimer = setTimeout(showScreensaver, 900000);
+    }
+    function showScreensaver() {
+      document.getElementById('screensaver').classList.add('active');
+    }
+    function hideScreensaver() {
+      document.getElementById('screensaver').classList.remove('active');
+    }
+    ['click','touchstart','mousemove','keydown'].forEach(e =>
+      document.addEventListener(e, resetInactivity)
+    );
+    resetInactivity();  // kick off
+  </script>
+
+  <!-- profiles.html -->
+<div id="profiles-content" class="tab-content hidden">
+  <div class="tab-header">
+    <span class="tab-title">Solder Profiles</span>
+    <button id="profiles-close-btn">×</button>
+  </div>
+
+  <div class="tab-body">
+    <ul id="profile-file-list"></ul>
+  </div>
+
+  <!-- Profile Editor -->
+  <div id="profile-editor-overlay" class="editor-overlay hidden">
+    <div id="editor-container">
+      <h3 id="profile-editor-filename">Edit Profile</h3>
+
+      <label for="profile-editor-icon-file">Icon</label>
+      <input type="file" id="profile-editor-icon-file" accept="image/png, image/jpeg" />
+      <input type="hidden" id="profile-editor-icon" />
+      <img id="profile-icon-preview" src="" alt="Preview" />
+
+      <label for="profile-editor-name">Profile Name</label>
+      <input type="text" id="profile-editor-name" placeholder="e.g. Sn63Pb37" />
+
+      <label for="profile-editor-composition">Composition</label>
+      <input type="text" id="profile-editor-composition" placeholder="e.g. 63% Tin, 37% Lead" />
+
+      <label for="profile-editor-molten">Molten Temp (°C)</label>
+      <input type="number" id="profile-editor-molten" placeholder="e.g. 183" />
+
+      <label for="profile-editor-solid">Solid Temp (°C)</label>
+      <input type="number" id="profile-editor-solid" placeholder="e.g. 138" />
+
+      <label for="profile-editor-peak">Peak Temp (°C)</label>
+      <input type="number" id="profile-editor-peak" />
+
+      <label for="profile-editor-preheat">Preheat Time (s)</label>
+      <input type="number" id="profile-editor-preheat" />
+
+      <label for="profile-editor-soak">Soak Time (s)</label>
+      <input type="number" id="profile-editor-soak" />
+
+      <label for="profile-editor-reflow">Reflow Time (s)</label>
+      <input type="number" id="profile-editor-reflow" />
+
+      <label for="profile-editor-cool">Cool Time (s)</label>
+      <input type="number" id="profile-editor-cool" />
+
+      <div class="editor-buttons">
+        <button onclick="saveProfile()">Save</button>
+        <button onclick="deleteProfile()">Delete</button>
+        <button id="profile-editor-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

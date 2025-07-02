@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System Stats</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background: linear-gradient(180deg, #181818 0%, #1e1e1e 100%);
+      color: #f5f5f5;
+      font-family: 'Orbitron', sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+    #main {
+      max-width: 90vw;
+      margin: 2rem auto;
+      padding: 1rem;
+    }
+    .stats-container {
+      background: linear-gradient(145deg, #222222, #1a1a1a);
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin: 1rem 0;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3), inset 0 0 10px rgba(216, 27, 96, 0.1);
+      transition: transform 0.2s ease;
+    }
+    .stats-container:hover {
+      transform: translateY(-5px);
+    }
+    .stats-container h2 {
+      font-size: 1.8rem;
+      color: #d81b60;
+      text-shadow: 0 0 5px rgba(216, 27, 96, 0.5);
+      margin-bottom: 1.5rem;
+      letter-spacing: 1px;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+    }
+    .stat-item {
+      background: #282828;
+      padding: 1rem;
+      border: 2px dashed #444;
+      border-radius: 8px;
+      text-align: center;
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+    }
+    .stat-item:hover {
+      background: #303030;
+      box-shadow: 0 0 15px rgba(75, 192, 192, 0.3);
+    }
+    .stat-item h3 {
+      font-size: 1rem;
+      color: #bbb;
+      margin-bottom: 0.5rem;
+      font-family: 'Fira Code', monospace;
+    }
+    .stat-item p {
+      font-size: 1.4rem;
+      color: #d64704;
+      font-family: 'Fira Code', monospace;
+      text-shadow: 0 0 3px rgba(214, 71, 4, 0.5);
+    }
+    .pie-chart-container {
+      width: 100%;
+      max-width: 400px;
+      margin: 2rem auto;
+      padding: 1rem;
+      background: #1e1e1e;
+      border: 2px dashed #444;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(75, 192, 192, 0.2);
+    }
+    .back-btn {
+  display: block;
+  margin: 2rem auto;
+  padding: 0.8rem 1.5rem;
+  background: linear-gradient(90deg, #d81b60, #d64704);
+  border: none;
+  border-radius: 6px;
+  max-width: 500px;
+  max-height: 250px;
+  color: #fff;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.back-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 15px rgba(216, 27, 96, 0.5);
+}
+    @media (max-width: 768px) {
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+      .pie-chart-container {
+        max-width: 80vw;
+      }
+      .stats-container h2 {
+        font-size: 1.5rem;
+      }
+      .stat-item p {
+        font-size: 1.2rem;
+      }
+    }
+    @media (max-width: 480px) {
+      .pie-chart-container {
+        max-width: 90vw;
+      }
+      .stats-container {
+        padding: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="main">
+    <div class="stats-container">
+      <h2>System Statistics</h2>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <h3>Max Plate Temp (°C)</h3>
+          <p id="max-plate-temp">{{ stats.max_plate_temp|default('--', true)|round(1) }}</p>
+        </div>
+        <div class="stat-item">
+          <h3>Max Lid Temp (°C)</h3>
+          <p id="max-lid-temp">{{ stats.max_lid_temp|default('--', true)|round(1) }}</p>
+        </div>
+        <div class="stat-item">
+          <h3>Average PWM</h3>
+          <p id="avg-pwm">{{ stats.avg_pwm|default('--', true)|round(1) }}</p>
+        </div>
+        <div class="stat-item">
+          <h3>Total Jobs Run</h3>
+          <p id="total-jobs">{{ stats.total_jobs|default('--', true) }}</p>
+        </div>
+      </div>
+    </div>
+    <div class="stats-container">
+      <h2>Key Metrics Overview</h2>
+      <div class="pie-chart-container">
+        <canvas id="stats-pie-chart"></canvas>
+      </div>
+    </div>
+    <button class="btn back-btn" onclick="window.location.href='/'">Back to Dashboard</button>
+  </div>
+  <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+  <script>
+    let pieChart = null;
+
+    async function fetchStats() {
+      try {
+        const response = await fetch('/api/stats');
+        const stats = await response.json();
+        document.getElementById('max-plate-temp').textContent = stats.maxPlateTemp ? stats.maxPlateTemp.toFixed(1) : '--';
+        document.getElementById('max-lid-temp').textContent = stats.maxLidTemp ? stats.maxLidTemp.toFixed(1) : '--';
+        document.getElementById('avg-pwm').textContent = stats.avgPwm ? stats.avgPwm.toFixed(1) : '--';
+        document.getElementById('total-jobs').textContent = stats.totalJobs || '--';
+
+        const pieData = [
+          stats.mostUsedTargetTemp ? (stats.mostUsedTargetTemp / 250) * 100 : 0,
+          stats.longestJobDuration ? (stats.longestJobDuration / 3600) * 100 : 0,
+          stats.highestTemp ? (stats.highestTemp / 250) * 100 : 0
+        ];
+
+        if (pieChart) {
+          pieChart.data.datasets[0].data = pieData;
+          pieChart.update();
+        } else {
+          pieChart = new Chart(document.getElementById('stats-pie-chart'), {
+            type: 'pie',
+            data: {
+              labels: ['Most Used Target Temp (°C)', 'Longest Job (s)', 'Highest Temp (°C)'],
+              datasets: [{
+                data: pieData,
+                backgroundColor: [
+                  'rgba(75, 192, 192, 0.6)', // Neon Cyan
+                  'rgba(255, 159, 64, 0.6)', // Industrial Orange
+                  'rgba(255, 99, 132, 0.6)'  // Neon Red
+                ],
+                borderColor: ['#333333'],
+                borderWidth: 2,
+                borderDash: [5, 5] // Match PWM dashed style
+              }]
+            },
+            options: {
+              animation: false,
+              plugins: {
+                legend: {
+                  labels: {
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    font: { size: 12, family: 'Orbitron', weight: '500' }
+                  },
+                  position: 'bottom'
+                },
+                tooltip: {
+                  backgroundColor: 'rgba(30, 30, 30, 0.8)',
+                  titleFont: { size: 14, family: 'Orbitron' },
+                  bodyFont: { size: 12, family: 'Orbitron' },
+                  bodyColor: 'rgba(255, 255, 255, 0.9)',
+                  borderColor: '#d81b60',
+                  borderWidth: 1
+                }
+              }
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+      }
+    }
+
+    fetchStats();
+    setInterval(fetchStats, 5000);
+  </script>
+</body>
+</html>
