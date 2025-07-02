@@ -1,5 +1,5 @@
-# Infernic
-Infernic_Firmware
+# Infernic Firmware
+
 ![machine_image](https://github.com/user-attachments/assets/b3163748-d6a7-42bf-ac57-e4a549a5c4b1)
 
 
