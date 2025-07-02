@@ -477,9 +477,9 @@ function setTemp() {
   if (!val) return;
 
   const temp = parseFloat(val);
-  if (isNaN(temp) || temp > 300) {
-    console.error('Invalid temperature or exceeds maximum limit of 300°C');
-    logToConsole('Error: Invalid temperature or exceeds maximum limit of 300°C');
+  if (isNaN(temp) || temp < 0 || temp > 300) {
+    console.error('Invalid temperature: must be between 0°C and 300°C');
+    logToConsole('Error: Invalid temperature: must be between 0°C and 300°C');
     document.getElementById('temp-input').value = '';
     return;
   }
