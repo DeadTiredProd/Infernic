@@ -176,13 +176,12 @@ float savedZPosition = 0.0f;
   G011     G011                              End the active job, turn heater off
   G020     G020                              Connect to host Raspberry Pi
   G021     G021                              Disconnect from host Raspberry Pi
-  G100     G100                              Query and return the current target temperature
+  G100     G100
+  T001     T001 F<frequency> D<toneDuration> C<count> B<delayBetween> R<repeat>
   Z0       Z0 S<pos>                         Move Z-axis to specified position (mm)
   Z1       Z1                                Save current Z-axis position
   Z2       Z2                                Return Z-axis to saved position
   Z3       Z3 S<positions> D<delays> L<loops> T<time>  Move Z-axis between comma-separated positions (mm)
-                                             with corresponding delays (ms), optionally looping
-                                             <loops> times or until <time> (seconds) is reached
   Z4       Z4                                Pause active job, move Z-axis away from work area
   Z5       Z5                                Unpause job, return Z-axis to pre-pause position
   Z28      Z28                               Home Z-axis to reference position
@@ -282,7 +281,24 @@ void handleLine(const char *ln, WiFiClient *client) {
     sendResponse("ACK: PID_CALIBRATE");
     runPIDAutotune(200.0f, 6, 5000, 2.0f);
     sendResponse("ACK: PID_CALIBRATE_DONE");
-
+  // T001 F<frequency> D<toneDuration> C<count> B<delayBetween> R<repeat> : Play custom tone sequence
+  }else if (strncmp(ln, "T001", 4) == 0) {
+    unsigned int frequency;
+    unsigned long toneDuration, delayBetween;
+    int count;
+    int repeat;
+    if (sscanf(ln + 4, " F%u D%lu C%d B%lu R%d", &frequency, &toneDuration, &count, &delayBetween, &repeat) == 5) {
+      if (frequency > 0 && toneDuration > 0 && count > 0 && delayBetween >= 0 && (repeat == 0 || repeat == 1)) {
+        playTone(BUZZER_PIN, frequency, toneDuration, count, delayBetween, repeat == 1);
+        char buf[64];
+        snprintf(buf, 64, "ACK: tone_played F=%u D=%lu C=%d B=%lu R=%d", frequency, toneDuration, count, delayBetween, repeat);
+        sendResponse(buf);
+      } else {
+        sendResponse("ERR: T001 invalid parameters");
+      }
+    } else {
+      sendResponse("ERR: T001 syntax");
+    }
   // M115 : Display help listing
   } else if (strcmp(ln, "HELP") == 0) {
     const char *help =
@@ -308,6 +324,8 @@ void handleLine(const char *ln, WiFiClient *client) {
         "G020           : Pi connect\n"
         "G021           : Pi disconnect\n"
         "G100           : Get current target temp\n"
+        "T001           : T001 F<frequency> D<toneDuration> C<count> B<delayBetween> R<repeat>\n"
+        "                : Play custom tone sequence\n"
         "Z0 S<pos>      : Move Z axis to position\n"
         "Z1             : Save current Z axis position\n"
         "Z2             : Return Z axis to saved position\n"
