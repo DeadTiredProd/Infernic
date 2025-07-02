@@ -565,7 +565,7 @@ def api_upload_icon():
     if file.filename == '':
         return jsonify(error="Empty filename"), 400
     if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
+        filename = secure_filename(file.filename) # type: ignore
         filepath = os.path.join(ICON_DIR, filename)
         counter = 1
         base, ext = os.path.splitext(filename)
