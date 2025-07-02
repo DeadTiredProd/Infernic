@@ -24,6 +24,10 @@ Average wattage over time
 Most non-electronic components — such as the outer enclosure and mounts — are 3D-printed for cost-efficiency and easy customization.
 
 
+![FlowChart_V1 3x](https://github.com/user-attachments/assets/415bfda5-ac8e-42dd-b127-61244782f7c8)
+
+
+
 ![UI_Overview_0](https://github.com/user-attachments/assets/e27dff51-dc92-4ef9-83ca-542a02f88137)
 🖥️ Web UI Overview
 The user interface offers a real-time temperature graph and system dashboard that includes:
