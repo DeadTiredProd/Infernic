@@ -371,17 +371,24 @@ def get_current_temperature():
 @app.route("/api/target_temp", methods=["POST"])
 def api_get_targ_temp():
     global target_temp_value, tempData
+    max_temp = 300  # Define max allowable temperature (adjust as needed)
     data = request.get_json(force=True)
     targ_temp = data.get("target_temp")
     try:
         t = float(targ_temp)
     except (TypeError, ValueError):
         return jsonify(error="Invalid Target Temp"), 400
+    
     previous_target = target_temp_value
-    target_temp_value = t
-    manage_job_duration(previous_target, t)
-    print(f"[API] Received target temperature → {t} °C")
-    tempData['datasets'][5]['data'].append(t)
+    if t > max_temp:
+        target_temp_value = 0
+        print(f"[API] Target temperature {t} °C exceeds max_temp {max_temp} °C, setting to 0 °C")
+    else:
+        target_temp_value = t
+        print(f"[API] Received target temperature → {t} °C")
+    
+    manage_job_duration(previous_target, target_temp_value)
+    tempData['datasets'][5]['data'].append(target_temp_value)
     return "", 204
 
 @app.route("/api/lid", methods=["POST"])

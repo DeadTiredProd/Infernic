@@ -476,35 +476,43 @@ function setTemp() {
   const val = document.getElementById('temp-input').value.trim();
   if (!val) return;
 
-  const command = `M113 S${val}`;
+  const temp = parseFloat(val);
+  if (isNaN(temp) || temp > 300) {
+    console.error('Invalid temperature or exceeds maximum limit of 300°C');
+    logToConsole('Error: Invalid temperature or exceeds maximum limit of 300°C');
+    document.getElementById('temp-input').value = '';
+    return;
+  }
+
+  const command = `M113 S${temp.toFixed(2)}`;
 
   fetch('/api/send-command', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ command: command })
   })
-  .then(res => {
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    return res.json();
-  })
-  .then(data => {
-    if (data.success) {
-      console.log(`Temperature set to ${val}`);
-      // Update the target temp display immediately
-      const targetTempSpan = document.getElementById('target-temp-2');
-      targetTempSpan.textContent = `${parseFloat(val).toFixed(2)} C`;
-      logToConsole(`Temperature set to ${val} C`);
-    } else {
-      console.error('Failed to set temperature:', data);
-      logToConsole(`Error: Failed to set temperature - ${data.error || 'Unknown error'}`);
-    }
-  })
-  .catch(err => {
-    console.error('Error sending temperature command:', err);
-    logToConsole(`Error setting temperature: ${err}`);
-  });
+    .then(res => {
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return res.json();
+    })
+    .then(data => {
+      if (data.success) {
+        console.log(`Temperature set to ${temp.toFixed(2)} C`);
+        // Update the target temp display immediately
+        const targetTempSpan = document.getElementById('target-temp-2');
+        targetTempSpan.textContent = `${temp.toFixed(2)} C`;
+        logToConsole(`Temperature set to ${temp.toFixed(2)} C`);
+      } else {
+        console.error('Failed to set temperature:', data);
+        logToConsole(`Error: Failed to set temperature - ${data.error || 'Unknown error'}`);
+      }
+    })
+    .catch(err => {
+      console.error('Error sending temperature command:', err);
+      logToConsole(`Error setting temperature: ${err}`);
+    });
 
   document.getElementById('temp-input').value = '';
 }
