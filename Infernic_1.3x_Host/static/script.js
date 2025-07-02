@@ -1086,13 +1086,20 @@ function init3DModel() {
   scene.background = new THREE.Color(0xf5f5f5);
 
   // Camera
-  camera = new THREE.PerspectiveCamera(
-    75,
-    container.clientWidth / container.clientHeight,
-    0.001,
-    100000
-  );
-  camera.position.set(0, 0, 0.3);
+camera = new THREE.PerspectiveCamera(
+  75,
+  container.clientWidth / container.clientHeight,
+  0.001,
+  100000
+);
+// Set camera position
+camera.position.set(0.00, -0.05, -0.10);
+// Set camera rotation (convert degrees to radians)
+camera.rotation.set(
+  THREE.MathUtils.degToRad(90.00), // X rotation
+  THREE.MathUtils.degToRad(-0.8), // Y rotation
+  THREE.MathUtils.degToRad(179.10) // Z rotation
+);
 
   // Renderer
   renderer = new THREE.WebGLRenderer({ antialias: true });
