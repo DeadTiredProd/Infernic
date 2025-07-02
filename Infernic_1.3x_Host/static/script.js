@@ -1265,48 +1265,137 @@ camera.rotation.set(
   }
 
   function updateHotplateColor(temp = currentTemp) {
-    if (!hotplateModel) return;
-    if (temp < 35) {
-      hotplateModel.traverse(child => {
-        if (child.isMesh && child.userData.originalMaterial) {
-          child.material = child.userData.originalMaterial;
-        }
-      });
+    if (!hotplateModel) {
+      console.error('Hotplate model not found');
       return;
     }
-    let color;
-    if (temp <= 40) {
-      color = new THREE.Color().lerpColors(
-        new THREE.Color(0x0000ff),
-                                           new THREE.Color(0x4444ff),
-                                           (temp - 35) / 5
-      );
-    } else if (temp <= 65) {
-      color = new THREE.Color().lerpColors(
-        new THREE.Color(0x4444ff),
-                                           new THREE.Color(0x00ff00),
-                                           (temp - 40) / 25
-      );
-    } else if (temp <= 90) {
-      color = new THREE.Color().lerpColors(
-        new THREE.Color(0x00ff00),
-                                           new THREE.Color(0xffff00),
-                                           (temp - 65) / 25
-      );
-    } else {
-      color = new THREE.Color().lerpColors(
-        new THREE.Color(0xffff00),
-                                           new THREE.Color(0xff0000),
-                                           Math.min((temp - 90) / 60, 1)
-      );
+  
+    // Hotplate dimensions (in mm, updated dynamically)
+    let plateWidth = 120; // Placeholder, updated from bounding box
+    let plateLength = 70; // Placeholder, updated from bounding box
+    let plateDepth = 10; // Placeholder, updated from bounding box
+    const modelScale = 0.1; // Your model's scale factor
+    let maxRadius = Math.sqrt(plateWidth ** 2 + plateDepth ** 2) / 2; // Max distance from center to corner
+  
+    // Temperature gradient parameters
+    const centerTemp = temp;
+    const edgeTempDrop = 0.5; // Edge is 80% of center temp (20% cooler)
+    const minTemp = 30; // Minimum temperature for color mapping
+  
+    // Color stops for the gradient
+    const colorStops = [
+      { temp: 30, color: new THREE.Color(0x0000ff) }, // Blue at 30°C
+      { temp: 65, color: new THREE.Color(0x00ff00) }, // Green at 65°C
+      { temp: 90, color: new THREE.Color(0xffff00) }, // Yellow at 90°C
+      { temp: 150, color: new THREE.Color(0xff0000) } // Red at 150°C
+    ];
+  
+    // Function to interpolate color based on temperature
+    function getColorForTemp(t) {
+      if (t <= colorStops[0].temp) return colorStops[0].color.clone();
+      if (t >= colorStops[colorStops.length - 1].temp) return colorStops[colorStops.length - 1].color.clone();
+      for (let i = 0; i < colorStops.length - 1; i++) {
+        const stop1 = colorStops[i];
+        const stop2 = colorStops[i + 1];
+        if (t >= stop1.temp && t <= stop2.temp) {
+          const fraction = (t - stop1.temp) / (stop2.temp - stop1.temp);
+          return new THREE.Color().lerpColors(stop1.color, stop2.color, fraction);
+        }
+      }
+      return new THREE.Color(1, 0, 0); // Fallback red for debugging
     }
+  
     hotplateModel.traverse(child => {
       if (child.isMesh) {
+        // Log bounding box for debugging
+        child.geometry.computeBoundingBox();
+        const bbox = child.geometry.boundingBox;
+        const bboxSize = new THREE.Vector3();
+        bbox.getSize(bboxSize);
+        const bboxCenter = new THREE.Vector3();
+        bbox.getCenter(bboxCenter);
+        console.log('Hotplate bounding box:', {
+          min: bbox.min.toArray(),
+          max: bbox.max.toArray(),
+          size: bboxSize.toArray(),
+          center: bboxCenter.toArray()
+        });
+  
+        // Update dimensions based on bounding box
+        plateWidth = bboxSize.x / modelScale;
+        plateDepth = bboxSize.y / modelScale;
+        maxRadius = Math.sqrt(plateWidth ** 2 + plateDepth ** 2) / 2;
+        console.log('Updated dimensions:', { plateWidth, plateDepth, maxRadius });
+  
+        // Restore original material if temp is below 35°C
+        if (centerTemp < 35) {
+          if (child.userData.originalMaterial) {
+            child.material = child.userData.originalMaterial;
+            console.log('Restored original material');
+          } else {
+            child.material = new THREE.MeshStandardMaterial({
+              color: 0x888888,
+              metalness: 0.5,
+              roughness: 0.5
+            });
+            console.log('Applied fallback material (no original material)');
+          }
+          child.material.needsUpdate = true;
+          return;
+        }
+  
+        // Ensure geometry has position attribute
+        if (!child.geometry.attributes.position) {
+          console.error('Geometry missing position attribute');
+          child.material = new THREE.MeshStandardMaterial({
+            color: 0xff0000, // Red to indicate error
+            metalness: 0.5,
+            roughness: 0.5
+          });
+          child.material.needsUpdate = true;
+          return;
+        }
+  
+        // Apply vertex colors for radial gradient
+        const positions = child.geometry.attributes.position;
+        const colors = new Float32Array(positions.count * 3); // RGB for each vertex
+        let minDistance = Infinity;
+        let maxDistance = 0;
+  
+        for (let i = 0; i < positions.count; i++) {
+          const x = positions.getX(i);
+          const y = positions.getY(i);
+          // Compute distance from center in local space
+          const distance = Math.sqrt((x - bboxCenter.x) ** 2 + (y - bboxCenter.y) ** 2);
+          minDistance = Math.min(minDistance, distance);
+          maxDistance = Math.max(maxDistance, distance);
+          const normalizedDistance = Math.min(distance / (maxRadius * modelScale), 1.0);
+          const localTemp = centerTemp * (1.0 - (1.0 - edgeTempDrop) * normalizedDistance);
+          const effectiveTemp = Math.max(localTemp, minTemp);
+          const color = getColorForTemp(effectiveTemp);
+          colors[i * 3] = color.r;
+          colors[i * 3 + 1] = color.g;
+          colors[i * 3 + 2] = color.b;
+          // Debug: Log a few vertex details
+          if (i < 5) {
+            console.log(`Vertex ${i}: x=${x.toFixed(2)}, y=${y.toFixed(2)}, distance=${distance.toFixed(2)}, localTemp=${effectiveTemp.toFixed(2)}, color=${color.getHexString()}`);
+          }
+        }
+  
+        console.log(`Distance range: min=${minDistance.toFixed(2)}, max=${maxDistance.toFixed(2)}`);
+  
+        // Add vertex colors to geometry
+        child.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        child.geometry.attributes.color.needsUpdate = true;
+  
+        // Apply material with vertex colors
         child.material = new THREE.MeshStandardMaterial({
-          color: color,
+          vertexColors: true,
           metalness: 0.5,
           roughness: 0.5
         });
+        child.material.needsUpdate = true;
+        console.log('Applied vertex color material');
       }
     });
   }
