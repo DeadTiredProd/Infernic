@@ -3,7 +3,7 @@
 #include "helpers/helpers.h"
 #include "heating/pwm.h"
 bool piConnected = false;
-
+String state = "Idle"; //Default state , state can be "Idle", "Heating", "Cooling", "Moving, Homing,Position Unknown", etc.
 WiFiServer ESPServer(23);  // like telnet or serial port over TCP
 
 void startESPServer() {
@@ -104,6 +104,7 @@ void posterTask(void *pvParameters) {
             Serial.printf("[Poster] TARGET POST failed, code: %d\n", httpCode);
           }
           http.end();
+          
 
           // Post PWM
           http.begin(PWM_URL);
@@ -134,7 +135,16 @@ void posterTask(void *pvParameters) {
             Serial.printf("[Poster] HUMIDITY POST failed, code: %d\n", httpCode);
           }
           http.end();
-
+          
+          // Post machine status
+          http.begin(STATE_URL); // Assuming STATE_URL is defined, e.g., "http://localhost:5000/api/set_state"
+          http.addHeader("Content-Type", "application/json");
+          String statePayload = String("{\"state\":\"") + state + "\"}";
+          int httpCode = http.POST(statePayload);
+          if (httpCode != HTTP_CODE_OK && httpCode != HTTP_CODE_NO_CONTENT) {
+              Serial.printf("[Poster] STATE POST failed, code: %d\n", httpCode);
+          }
+          http.end();
         }
       }
     }

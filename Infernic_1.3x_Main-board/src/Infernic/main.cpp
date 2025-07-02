@@ -56,6 +56,8 @@ void setup() {
   lastCmd  = millis();
   lastTemp = millis();
   blink(2, 150);
+
+  state = "IDLE"; // Initialize state to Idle
   
 }
 

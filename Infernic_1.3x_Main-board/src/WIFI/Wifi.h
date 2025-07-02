@@ -7,7 +7,7 @@
 #include "freertos/queue.h"
 #include <ArduinoOTA.h>
 
-
+extern String state;
 void connectWiFi();
 void startESPServer();
 void handleESPServer();
