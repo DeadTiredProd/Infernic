@@ -68,7 +68,7 @@ tempData = {
     ]
 }
 
-@app.route("/api/set_state", methods=["POST"])
+@app.route("/api/state", methods=["POST"])
 def set_state():
     global state_value
     data = request.get_json()

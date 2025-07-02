@@ -63,6 +63,7 @@ void setTargetTemp(float temp) {
   } else if (temp >= MIN_TEMP && temp <= MAX_TEMP) {
     Serial.printf("Target temperature set to %.2f °C. Relay ON.\n", targetTemp);
     controlRelay(1);
+    state = "HEATING";
   } else {
     Serial.printf("Target temperature %.2f °C is out of safe range (50–300 °C). Relay OFF.\n", temp);
     controlRelay(0);
@@ -171,8 +172,18 @@ void checkTemperature(float t) {
   if (t < -10.0f || t > 310.0f) {
     emergencyShutdown();
     sendFaultAlert();
+    state = "ERROR"; // Set state to ERROR for fault condition
+  } else if (targetTemp == 0.0f && t < 40.0f) {
+    state = "IDLE"; // Set state to IDLE when target is 0 and temp < 40
+  } else if (abs(t - targetTemp) <= 1.0f && targetTemp > 0.0f) {
+    state = "STABLE"; // Set state to STABLE when temp is within 1°C of target
+  } else if (t < 40.0f && CANHEAT && targetTemp > 0.0f && targetTemp > MIN_TEMP) {
+    state = "HEATING";
+  } else if (t > targetTemp && t >= 40.0f) {
+    state = "COOLING";
   }
 }
+
 
 static bool _rampTo(float setpoint, float tol) {
   setTargetTemp(setpoint);

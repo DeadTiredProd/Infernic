@@ -140,7 +140,7 @@ void posterTask(void *pvParameters) {
           http.begin(STATE_URL); // Assuming STATE_URL is defined, e.g., "http://localhost:5000/api/set_state"
           http.addHeader("Content-Type", "application/json");
           String statePayload = String("{\"state\":\"") + state + "\"}";
-          int httpCode = http.POST(statePayload);
+          httpCode = http.POST(statePayload);
           if (httpCode != HTTP_CODE_OK && httpCode != HTTP_CODE_NO_CONTENT) {
               Serial.printf("[Poster] STATE POST failed, code: %d\n", httpCode);
           }
