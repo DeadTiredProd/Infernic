@@ -7,3 +7,4 @@ Infernic is firmware that powers a custom machine designed to control a Positive
 
 
 ![UI_Overview_0](https://github.com/user-attachments/assets/e27dff51-dc92-4ef9-83ca-542a02f88137)
+![Graph_0](https://github.com/user-attachments/assets/2a2af5fd-e34a-47b4-8e9b-3e688015c1dc)
