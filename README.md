@@ -44,6 +44,9 @@ This gives a clear view of the system’s performance for both short- and long-t
 
 ![Graph_0](https://github.com/user-attachments/assets/2a2af5fd-e34a-47b4-8e9b-3e688015c1dc)
 
+![heat_gradient](https://github.com/user-attachments/assets/4717adb2-fb0b-4188-bb8f-faca66b15333)
+
+
 🖼️ Visual Board Detection
 As of July 2nd, 2025, the system includes a bitmap-based visual processing module. Images are converted to black and white for lightweight detection tasks. This feature is currently used to visually detect when a board has been placed on the heating plate — primarily for monitoring and logging purposes, not for active control.
 ![image](https://github.com/user-attachments/assets/7553fddc-2176-4e5e-a4dc-e63f74dac3bf)
