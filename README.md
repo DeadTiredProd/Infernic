@@ -2,7 +2,7 @@
 
 ![machine_image](https://github.com/user-attachments/assets/b3163748-d6a7-42bf-ac57-e4a549a5c4b1)
 
-Infernic is the custom firmware behind a purpose-built machine for controlling a Positive Temperature Coefficient (PTC) heater, designed for soldering tasks with a maximum plate temperature of 300 °C. It runs on an ESP32 38-pin Dev Module, coordinated by a Raspberry Pi 5 (8GB) acting as the host.
+# Infernic is the custom firmware behind a purpose-built machine for controlling a Positive Temperature Coefficient (PTC) heater, designed for soldering tasks with a maximum plate temperature of 300 °C. It runs on an ESP32 38-pin Dev Module, coordinated by a Raspberry Pi 5 (8GB) acting as the host.
 
 The firmware implements PID-based heater control, starting with basic bang-bang logic and transitioning to PWM for fine-tuned precision. The heating element is regulated through a solid-state relay (SSR). The Raspberry Pi communicates with the ESP32 via a web-based interface, accessible from any device on the same network.
 
