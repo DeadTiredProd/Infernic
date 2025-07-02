@@ -312,11 +312,9 @@ void handleLine(const char *ln, WiFiClient *client) {
         "M116 S<ki>     : Set PID ki\n"
         "M117 S<kd>     : Set PID kd\n"
         "M118           :Return current PID values (kp, ki, kd)\n"
-        // Flash Commands
         "M119           : Save Settings to flash\n"
         "M120           : Load Settings from flash\n"
         "M121           : Reset Settings to defaults\n"
-
         "G003           : Emergency shutdown\n"
         "G004           : Firmware restart\n"
         "G010           : Start job\n"

@@ -108,6 +108,7 @@ async function initialize() {
   }
 
   loaderText.textContent = 'Initializing interface…';
+  logToConsole('Connected to Infernic API');
   progressBar.style.width = '50%';
   await fetch('/api/status'); // full fetch now
   progressBar.style.width = '100%';
@@ -494,12 +495,15 @@ function setTemp() {
       // Update the target temp display immediately
       const targetTempSpan = document.getElementById('target-temp-2');
       targetTempSpan.textContent = `${parseFloat(val).toFixed(2)} C`;
+      logToConsole(`Temperature set to ${val} C`);
     } else {
       console.error('Failed to set temperature:', data);
+      logToConsole(`Error: Failed to set temperature - ${data.error || 'Unknown error'}`);
     }
   })
   .catch(err => {
     console.error('Error sending temperature command:', err);
+    logToConsole(`Error setting temperature: ${err}`);
   });
 
   document.getElementById('temp-input').value = '';
@@ -508,6 +512,9 @@ function setTemp() {
 
 
 function restartFirmware() {
+
+  logToConsole('Restarting firmware…');
+  // After the delay, send the restart command
   fetch('/api/restart-firmware', { method: 'POST' });
 }
 
@@ -522,6 +529,7 @@ function restartHost() {
   loaderText.textContent        = 'Restarting host…';
   progressBar.style.animation   = 'pulse 2s infinite';
   progressBar.style.width       = '0%';
+  logToConsole('Restarting host… This may take a few seconds.');
 
   fetch('/api/restart-host', { method: 'POST' })
     .then(() => setTimeout(() => window.location.reload(), 1500));
@@ -567,8 +575,12 @@ async function saveFile() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content })
   });
+  logToConsole(`File ${name} saved successfully.`);
   closeEditor();
   loadConfigList();
+  logToConsole("Reloading config list after save… and restarting firmware and host");
+  restartFirmware();
+  restartHost();
 }
 
 // Command queue for macros

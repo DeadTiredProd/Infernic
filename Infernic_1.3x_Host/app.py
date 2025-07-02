@@ -291,6 +291,7 @@ def load_machine_config():
         "fan_enabled": cfg.getboolean("Plate", "fan_enabled", fallback=True),
     }
 
+
 def get_machine_status():
     return {
         "current_temp": current_temp_value,
@@ -448,6 +449,7 @@ def api_restart_firmware():
 
 @app.route("/api/restart-host", methods=["POST"])
 def api_restart_host():
+    
     global target_temp_value
     previous_target = target_temp_value
     target_temp_value = 0.0

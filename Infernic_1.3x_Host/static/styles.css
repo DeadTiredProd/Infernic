@@ -689,7 +689,7 @@ max-height: 40px;
 
 #console-content {
 transition: max-height 0.3s ease, opacity 0.3s ease;
-max-height: 350px; /* Input + button (~50px) + output (300px) */
+max-height: 550px; /* Input + button (~50px) + output (300px) */
 opacity: 1;
 }
 
@@ -702,13 +702,13 @@ overflow: hidden;
 
 #console-output {
 transition: max-height 0.3s ease, opacity 0.3s ease;
-max-height: 300px;
+max-height: fit-content;
 opacity: 1;
 background: #111;
 padding: 10px;
-overflow-y: auto;
-white-space: pre-wrap;
-word-wrap: break-word;
+overflow-y: visible;
+white-space: pre-line;
+word-wrap: auto;
 font-family: monospace;
 color: #f28c38 !important;
 }
