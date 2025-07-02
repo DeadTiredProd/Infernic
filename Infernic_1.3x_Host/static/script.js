@@ -280,8 +280,8 @@ async function fetchStatus() {
       if (state && state.toUpperCase() === 'STABLE' && previousState !== 'STABLE') {
         console.log('State transitioned to STABLE, triggering tone sequence');
         const toneSequence = [
-          'T001 F500 D150 C1 B50 R0',
-          'T001 F700 D150 C1 B50 R0'
+          'T001 F300 D150 C1 B50 R0',
+          'T001 F300 D150 C1 B50 R0'
         ];
         let delay = 0;
         for (const command of toneSequence) {
@@ -304,8 +304,33 @@ async function fetchStatus() {
       } else if (state && state.toUpperCase() === 'HEATING' && previousState !== 'HEATING') {
         console.log('State transitioned to HEATING, triggering tone sequence');
         const toneSequence = [
-          'T001 F700 D150 C1 B50 R0',
-          'T001 F500 D200 C1 B0 R0'
+          'T001 F300 D50 C1 B50 R0',
+          'T001 F300 D50 C1 B50 R0',
+          'T001 F300 D50 C1 B50 R0',
+        ];
+        let delay = 0;
+        for (const command of toneSequence) {
+          setTimeout(async () => {
+            try {
+              const toneResult = await sendCommand(command);
+              if (toneResult.success) {
+                console.log(`Tone command ${command} sent successfully`);
+              } else {
+                console.error(`Failed to send tone command ${command}:`, toneResult.error || 'Unknown error');
+              }
+            } catch (toneError) {
+              console.error(`Error sending tone command ${command}:`, toneError);
+              logToConsole(`Error sending tone command ${command}: ${toneError}`);
+            }
+          }, delay);
+          delay += 200; // Adjust delay to account for tone duration (150 or 200 ms) + 50 ms gap
+        }
+      } else if (state && state.toUpperCase() === 'IDLE' && previousState !== 'IDLE') {
+        console.log('State transitioned to IDLE, triggering tone sequence');
+        const toneSequence = [
+          'T001 F400 D100 C1 B50 R0',
+          'T001 F300 D75 C1 B50 R0',
+          'T001 F200 D50 C1 B50 R0'
         ];
         let delay = 0;
         for (const command of toneSequence) {
