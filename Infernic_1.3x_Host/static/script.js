@@ -132,10 +132,34 @@ async function initialize() {
         setTemp();
       }
     });
+
+    sendCommand('T001 F300  D100 C1 B0 R0 ') //Send Interface Connection Tone
+    sendCommand('T001 F400  D100 C1 B0 R0 ') //Send Interface Connection Tone 1
+
   }, 300);
 }
 
 
+// Reusable function to send commands to the API
+async function sendCommand(command) {
+  try {
+    const response = await fetch('/api/send-command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error sending command:', error);
+    throw error;
+  }
+}
 
 
 function startStatusPolling() {
@@ -158,37 +182,58 @@ const HUMIDITY_MAX_DELTA = 20; // Max allowed change in %
 
 // Valid statuses
 const validStatuses = [
-  "IDLE", "HEATING", "COOLING", "STABILIZING",
+  "IDLE", "HEATING", "COOLING", "STABLE",
   "HOMING", "HOMED", "COOLED", "HEATED",
   "POSITION UNKNOWN", "MOVING"
 ];
 
-function setMachineState(newState) {
-  fetch("/api/set_state", {
+async function setMachineState(newState) {
+  try {
+    const response = await fetch("/api/set_state", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ state: newState })
-  })
-      .then(res => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.json();
-      })
-      .then(data => {
-          if (data.success) {
-              setMachineStatus(data.state); // Update UI
-              console.log(`State set to ${data.state}`);
-              logToConsole(`State set to ${data.state}`);
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log("Server response:", JSON.stringify(data, null, 2)); // Debug response
+
+    if (data.success) {
+      setMachineStatus(data.state); // Update UI
+      console.log(`State set to ${data.state}`);
+      logToConsole(`State set to ${data.state}`);
+
+      // Check for STABLE state (case-insensitive)
+      if (data.state && data.state.toUpperCase() === "STABLE") {
+        console.log("Temperature is stable, triggering tone command");
+        try {
+          const toneResult = await sendCommand('T001 F713 D100 C1 B0 R0')
+          if (toneResult.success) {
+            console.log("Tone command sent successfully");
+            logToConsole("Tone command sent successfully");
           } else {
-              console.error("Failed to set state:", data.error);
-              logToConsole(`Error: Failed to set state`);
-              setMachineStatus("ERROR");
+            console.error("Failed to send tone command:", toneResult.error || "Unknown error");
+            logToConsole(`Error: Failed to send tone command - ${toneResult.error || "Unknown error"}`);
           }
-      })
-      .catch(err => {
-          console.error("Error setting state:", err);
-          logToConsole(`Error setting state: ${err}`);
-          setMachineStatus("ERROR");
-      });
+        } catch (toneError) {
+          console.error("Error sending tone command:", toneError);
+          logToConsole(`Error sending tone command: ${toneError}`);
+        }
+      }
+    } else {
+      console.error("Failed to set state:", data.error || "Unknown error");
+      logToConsole(`Error: Failed to set state - ${data.error || "Unknown error"}`);
+      setMachineStatus("ERROR");
+    }
+  } catch (err) {
+    console.error("Error setting state:", err);
+    logToConsole(`Error setting state: ${err}`);
+    setMachineStatus("ERROR");
+  }
 }
 
 // Optional: Log to console-output (if you want to keep this)
@@ -201,54 +246,108 @@ function logToConsole(message) {
 }
 
 
-function fetchStatus() {
+// Define previousState globally (add this near the top of your code, e.g., after pwmBuffer)
+let previousState = null;
+
+async function fetchStatus() {
   fetch('/api/status')
-  .then(r => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
-  })
-  .then(data => {
-    const ts = new Date().toLocaleTimeString();
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then(data => {
+      const ts = new Date().toLocaleTimeString();
 
-    // Extract data
-    let duty = Number(data.duty_cycle); // 0–100%
-    let pwm = Number(data.pwm); // 0–255
-    let watts = Number(data.watts); // Power (W)
-  const currentTemp = Number(data.current_temp); // Plate Temp (°C)
-  const targetTemp = Number(data.target_temp); // Target Temp (°C)
-  let lidTemp = Number(data.lid_temp); // Lid Temp (°C)
-  let humidity = Number(data.humidity); // Humidity (%)
-  const currentStep = Number(data.current_step); // Current Step
-  const state = data.state || 'Unknown'; // State
+      // Extract data
+      let duty = Number(data.duty_cycle); // 0–100%
+      let pwm = Number(data.pwm); // 0–255
+      let watts = Number(data.watts); // Power (W)
+      const currentTemp = Number(data.current_temp); // Plate Temp (°C)
+      const targetTemp = Number(data.target_temp); // Target Temp (°C)
+      let lidTemp = Number(data.lid_temp); // Lid Temp (°C)
+      let humidity = Number(data.humidity); // Humidity (%)
+      const currentStep = Number(data.current_step); // Current Step
+      const state = data.state || 'Unknown'; // State
 
-  // If targetTemp is 0, force duty, watts, and pwm to 0
-  if (targetTemp === 0) {
-    duty = 0;
-    watts = 0;
-    pwm = 0;
-  }
+      // If targetTemp is 0, force duty, watts, and pwm to 0
+      if (targetTemp === 0) {
+        duty = 0;
+        watts = 0;
+        pwm = 0;
+      }
 
-  // Filter noise for lid temperature
-  if (lastValidLidTemp === null || Math.abs(lidTemp - lastValidLidTemp) <= LID_TEMP_MAX_DELTA) {
-    lastValidLidTemp = lidTemp;
-  } else {
-    console.warn(`[fetchStatus] Lid temp outlier detected: ${lidTemp}, using last valid: ${lastValidLidTemp}`);
-    lidTemp = lastValidLidTemp !== null ? lastValidLidTemp : 0;
-  }
+      // Trigger tone sequence on state transition to STABLE or HEATING
+      if (state && state.toUpperCase() === 'STABLE' && previousState !== 'STABLE') {
+        console.log('State transitioned to STABLE, triggering tone sequence');
+        const toneSequence = [
+          'T001 F500 D150 C1 B50 R0',
+          'T001 F700 D150 C1 B50 R0'
+        ];
+        let delay = 0;
+        for (const command of toneSequence) {
+          setTimeout(async () => {
+            try {
+              const toneResult = await sendCommand(command);
+              if (toneResult.success) {
+                console.log(`Tone command ${command} sent successfully`);
+              } else {
+                console.error(`Failed to send tone command ${command}:`, toneResult.error || 'Unknown error');
+                logToConsole(`Error: Failed to send tone command ${command} - ${toneResult.error || 'Unknown error'}`);
+              }
+            } catch (toneError) {
+              console.error(`Error sending tone command ${command}:`, toneError);
+              logToConsole(`Error sending tone command ${command}: ${toneError}`);
+            }
+          }, delay);
+          delay += 100; // Adjust delay to account for tone duration (150 or 200 ms) + 50 ms gap
+        }
+      } else if (state && state.toUpperCase() === 'HEATING' && previousState !== 'HEATING') {
+        console.log('State transitioned to HEATING, triggering tone sequence');
+        const toneSequence = [
+          'T001 F700 D150 C1 B50 R0',
+          'T001 F500 D200 C1 B0 R0'
+        ];
+        let delay = 0;
+        for (const command of toneSequence) {
+          setTimeout(async () => {
+            try {
+              const toneResult = await sendCommand(command);
+              if (toneResult.success) {
+                console.log(`Tone command ${command} sent successfully`);
+              } else {
+                console.error(`Failed to send tone command ${command}:`, toneResult.error || 'Unknown error');
+              }
+            } catch (toneError) {
+              console.error(`Error sending tone command ${command}:`, toneError);
+              logToConsole(`Error sending tone command ${command}: ${toneError}`);
+            }
+          }, delay);
+          delay += 200; // Adjust delay to account for tone duration (150 or 200 ms) + 50 ms gap
+        }
+      }
+      previousState = state; // Update previousState after checking
 
-  // Filter noise for humidity
-  if (lastValidHumidity === null || Math.abs(humidity - lastValidHumidity) <= HUMIDITY_MAX_DELTA) {
-    lastValidHumidity = humidity;
-  } else {
-    console.warn(`[fetchStatus] Humidity outlier detected: ${humidity}, using last valid: ${lastValidHumidity}`);
-    humidity = lastValidHumidity !== null ? lastValidHumidity : 0;
-  }
+      // Filter noise for lid temperature
+      if (lastValidLidTemp === null || Math.abs(lidTemp - lastValidLidTemp) <= LID_TEMP_MAX_DELTA) {
+        lastValidLidTemp = lidTemp;
+      } else {
+        console.warn(`[fetchStatus] Lid temp outlier detected: ${lidTemp}, using last valid: ${lastValidLidTemp}`);
+        lidTemp = lastValidLidTemp !== null ? lastValidLidTemp : 0;
+      }
 
-  // Log API response
-  console.log(`[fetchStatus] API: duty_cycle=${duty}, pwm=${pwm}, watts=${watts}, current_temp=${currentTemp}, target_temp=${targetTemp}, lid_temp=${lidTemp}, humidity=${humidity}, current_step=${currentStep}, state=${state}`);
+      // Filter noise for humidity
+      if (lastValidHumidity === null || Math.abs(humidity - lastValidHumidity) <= HUMIDITY_MAX_DELTA) {
+        lastValidHumidity = humidity;
+      } else {
+        console.warn(`[fetchStatus] Humidity outlier detected: ${humidity}, using last valid: ${lastValidHumidity}`);
+        humidity = lastValidHumidity !== null ? lastValidHumidity : 0;
+      }
 
-  // Update UI
-  const elements = {
+      // Log API response
+      console.log(`[fetchStatus] API: duty_cycle=${duty}, pwm=${pwm}, watts=${watts}, current_temp=${currentTemp}, target_temp=${targetTemp}, lid_temp=${lidTemp}, humidity=${humidity}, current_step=${currentStep}, state=${state}`);
+
+      // Update UI
+      const elements = {
         machineStatus: document.getElementById('machine-status'),
         currentTemp: document.getElementById('current-temp'),
         targetSpan: document.getElementById('target-temp'),
@@ -259,61 +358,57 @@ function fetchStatus() {
         pwmValue: document.getElementById('pwm-value'),
         lidTemp: document.getElementById('lid-temp'),
         interiorHumid: document.getElementById('interior-humid')
+      };
 
-  };
+      if (elements.machineStatus) elements.machineStatus.textContent = state;
+      if (elements.currentTemp) elements.currentTemp.textContent = currentTemp.toFixed(1) + ' °C';
+      if (elements.targetSpan) elements.targetSpan.textContent = targetTemp.toFixed(1) + ' °C';
+      if (elements.secondTarget) elements.secondTarget.textContent = targetTemp.toFixed(1) + ' °C';
+      if (elements.secondTemp) elements.secondTemp.textContent = currentTemp.toFixed(1) + ' °C';
+      if (elements.currentStep) elements.currentStep.textContent = currentStep;
+      if (elements.powerLevel) elements.powerLevel.textContent = duty.toFixed(0) + ' %';
+      if (elements.pwmValue) elements.pwmValue.textContent = pwm.toFixed(0); // Raw PWM (0–255)
+      if (elements.lidTemp) elements.lidTemp.textContent = lidTemp.toFixed(1) + ' °C';
+      if (elements.interiorHumid) elements.interiorHumid.textContent = humidity.toFixed(1) + ' %';
 
-  if (elements.machineStatus) elements.machineStatus.textContent = state;
-  if (elements.currentTemp) elements.currentTemp.textContent = currentTemp.toFixed(1) + ' °C';
-  if (elements.targetSpan) elements.targetSpan.textContent = targetTemp.toFixed(1) + ' °C';
-  if (elements.secondTarget) elements.secondTarget.textContent = targetTemp.toFixed(1) + ' °C';
-  if (elements.secondTemp) elements.secondTemp.textContent = currentTemp.toFixed(1) + ' °C';
-  if (elements.currentStep) elements.currentStep.textContent = currentStep;
-  if (elements.powerLevel) elements.powerLevel.textContent = duty.toFixed(0) + ' %';
-  if (elements.pwmValue) elements.pwmValue.textContent = pwm.toFixed(0); // Raw PWM (0–255)
-  if (elements.lidTemp) elements.lidTemp.textContent = lidTemp.toFixed(1) + ' °C';
-  if (elements.interiorHumid) elements.interiorHumid.textContent = humidity.toFixed(1) + ' %';
+      // Log chart data
+      console.log(`[fetchStatus] Chart: DutyCycle=${duty}, PWM=${pwm}, Watts=${watts}, PlateTemp=${currentTemp}, LidTemp=${lidTemp}, Humidity=${humidity}, TargetTemp=${targetTemp}`);
 
-  // Log chart data
-  console.log(`[fetchStatus] Chart: DutyCycle=${duty}, PWM=${pwm}, Watts=${watts}, PlateTemp=${currentTemp}, LidTemp=${lidTemp}, Humidity=${humidity}, TargetTemp=${targetTemp}`);
+      // Update chart
+      if (tempData.labels.length > 25) {
+        tempData.labels.shift();
+        tempData.datasets.forEach(dataset => dataset.data.shift());
+      }
+      tempData.labels.push(ts);
+      tempData.datasets[0].data.push(duty); // Duty Cycle % (0–100)
+      tempData.datasets[1].data.push(currentTemp); // Plate Temp (°C)
+      tempData.datasets[2].data.push(lidTemp); // Lid Temp (°C)
+      tempData.datasets[3].data.push(humidity); // Humidity (%)
+      tempData.datasets[4].data.push(watts); // Power (W)
+      tempData.datasets[5].data.push(targetTemp); // Target Temp (°C)
+      tempData.datasets[6].data.push(pwm); // Raw PWM (0–255)
+      console.log(pwm);
 
-    // Update chart
-    if (tempData.labels.length > 25) {
-      tempData.labels.shift();
-      tempData.datasets.forEach(dataset => dataset.data.shift());
-    }
-    tempData.labels.push(ts);
-    tempData.datasets[0].data.push(duty); // Duty Cycle % (0–100)
-  tempData.datasets[1].data.push(currentTemp); // Plate Temp (°C)
-  tempData.datasets[2].data.push(lidTemp); // Lid Temp (°C)
-  tempData.datasets[3].data.push(humidity); // Humidity (%)
-  tempData.datasets[4].data.push(watts); // Power (W)
-  tempData.datasets[5].data.push(targetTemp); // Target Temp (°C)
-  tempData.datasets[6].data.push(pwm); // Raw PWM (0–255)
-  console.log(pwm);
+      // Log dataset lengths
+      console.log(`[fetchStatus] Datasets:`, tempData.datasets.map(d => `${d.label}: ${d.data.length}`));
 
-  // Log dataset lengths
-  console.log(`[fetchStatus] Datasets:`, tempData.datasets.map(d => `${d.label}: ${d.data.length}`));
+      // Force chart update
+      if (tempChart) {
+        tempChart.data = tempData;
+        tempChart.update();
+        console.log('[fetchStatus] Chart updated');
+      } else {
+        console.error('[fetchStatus] tempChart not initialized');
+      }
 
-  // Force chart update
-  if (tempChart) {
-    tempChart.data = tempData;
-    tempChart.update();
-    console.log('[fetchStatus] Chart updated');
-  } else {
-    console.error('[fetchStatus] tempChart not initialized');
-  }
-
-  // Clear fault overlay on successful fetch
-  hideFaultOverlay();
-  })
-  .catch(err => {
-    console.error('[fetchStatus] Failed to fetch:', err);
-    showFaultOverlay('Failed to fetch status. Retrying...');
-  });
-
-  
+      // Clear fault overlay on successful fetch
+      hideFaultOverlay();
+    })
+    .catch(err => {
+      console.error('[fetchStatus] Failed to fetch:', err);
+      showFaultOverlay('Failed to fetch status. Retrying...');
+    });
 }
-
 
 function showFaultOverlay(message = 'A fault has occurred') {
   document.getElementById('main-ui').classList.add('hidden');
@@ -346,6 +441,10 @@ async function pollFault() {
 window.addEventListener('load', () => {
   pollFault();
 });
+
+
+
+
 // ── Commands ──
 function setTemp() {
   const val = document.getElementById('temp-input').value.trim();
@@ -878,12 +977,14 @@ document.addEventListener('DOMContentLoaded', () => {
     animate();
 });
 
-function sendConsoleCommand() {
+function sendConsoleCommand(command = null) {
   const input = document.getElementById("console-input");
   const output = document.getElementById("console-output");
 
-  const command = input.value.trim();
-  if (!command) {
+  // Use provided command if available, otherwise get from input field
+  const cmd = command !== null ? command.trim() : input.value.trim();
+
+  if (!cmd) {
     output.textContent = "Please enter a command.";
     return;
   }
@@ -893,24 +994,24 @@ function sendConsoleCommand() {
   fetch("/api/send-command", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ command: command })
+    body: JSON.stringify({ command: cmd })
   })
-  .then(res => {
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    return res.json();
-  })
-  .then(data => {
-    if (data.success) {
-      output.textContent = `Command sent successfully.\nResponse:\n${data.response}`;
-    } else {
-      output.textContent = "Command failed to send.\n" + JSON.stringify(data, null, 2);
-    }
-  })
-  .catch(err => {
-    output.textContent = `Error sending command:\n${err}`;
-  });
+    .then(res => {
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return res.json();
+    })
+    .then(data => {
+      if (data.success) {
+        output.textContent = `Command sent successfully.\nResponse:\n${data.response}`;
+      } else {
+        output.textContent = `Command failed to send.\n${JSON.stringify(data, null, 2)}`;
+      }
+    })
+    .catch(err => {
+      output.textContent = `Error sending command:\n${err}`;
+    });
 }
 
 // Three.js setup
