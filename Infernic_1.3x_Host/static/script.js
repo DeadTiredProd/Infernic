@@ -156,6 +156,51 @@ let lastValidHumidity = null;
 const LID_TEMP_MAX_DELTA = 20; // Max allowed change in °C
 const HUMIDITY_MAX_DELTA = 20; // Max allowed change in %
 
+// Valid statuses
+const validStatuses = [
+  "IDLE", "HEATING", "COOLING", "STABILIZING",
+  "HOMING", "HOMED", "COOLED", "HEATED",
+  "POSITION UNKNOWN", "MOVING"
+];
+
+function setMachineState(newState) {
+  fetch("/api/set_state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state: newState })
+  })
+      .then(res => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.json();
+      })
+      .then(data => {
+          if (data.success) {
+              setMachineStatus(data.state); // Update UI
+              console.log(`State set to ${data.state}`);
+              logToConsole(`State set to ${data.state}`);
+          } else {
+              console.error("Failed to set state:", data.error);
+              logToConsole(`Error: Failed to set state`);
+              setMachineStatus("ERROR");
+          }
+      })
+      .catch(err => {
+          console.error("Error setting state:", err);
+          logToConsole(`Error setting state: ${err}`);
+          setMachineStatus("ERROR");
+      });
+}
+
+// Optional: Log to console-output (if you want to keep this)
+function logToConsole(message) {
+  const consoleOutput = document.getElementById("console-output");
+  if (consoleOutput) {
+      consoleOutput.textContent += `${new Date().toLocaleTimeString()}: ${message}\n`;
+      consoleOutput.scrollTop = consoleOutput.scrollHeight;
+  }
+}
+
+
 function fetchStatus() {
   fetch('/api/status')
   .then(r => {
@@ -204,7 +249,7 @@ function fetchStatus() {
 
   // Update UI
   const elements = {
-    machineStatus: document.getElementById('machine-status'),
+        machineStatus: document.getElementById('machine-status'),
         currentTemp: document.getElementById('current-temp'),
         targetSpan: document.getElementById('target-temp'),
         secondTarget: document.getElementById('target-temp-2'),
@@ -265,6 +310,8 @@ function fetchStatus() {
     console.error('[fetchStatus] Failed to fetch:', err);
     showFaultOverlay('Failed to fetch status. Retrying...');
   });
+
+  
 }
 
 

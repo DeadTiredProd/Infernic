@@ -68,6 +68,13 @@ tempData = {
     ]
 }
 
+@app.route("/api/set_state", methods=["POST"])
+def set_state():
+    global state_value
+    data = request.get_json()
+    state_value = str(data.get("state", "")).upper() if data and "state" in data else "ERROR"
+    return jsonify({"success": True, "state": state_value})
+
 def send_command_to_esp32(cmd: str) -> tuple[bool, str]:
     try:
         print(f"Connecting to ESP32 at {ESP32_HOST}:{ESP32_PORT}...")
