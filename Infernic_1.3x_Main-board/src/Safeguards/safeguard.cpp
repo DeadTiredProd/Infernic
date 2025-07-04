@@ -14,12 +14,13 @@ void sendFaultAlert() {
       connectWiFi();               // your existing reconnect logic
       if (WiFi.status() != WL_CONNECTED) return;
     }
-    // Play a harsh error tone: 3 rapid low-pitched scratchy beeps
-    playTone(BUZZER_PIN, 400, 80, 3, 80, false);
+    
     
     WiFiClient client;
     if (!client.connect(HOST_IP, HOST_PORT)) {
       Serial.println("sendFaultAlert: connect failed");
+      // Play a harsh error tone: 3 rapid low-pitched scratchy beeps
+      playTone(BUZZER_PIN, 400, 80, 3, 80, false);
       return;
     }
   

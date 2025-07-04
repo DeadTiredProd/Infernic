@@ -91,10 +91,16 @@ void loop() {
     }
   }
 
+
+  // ——— 5) Temperature read & checks —————————————————————
+  float t = readTemp();
+  checkTemperature(t);  // hard fault if sensor bad
+  AHT10Reading data = ReadAHT10();  // Fast as possible
+
   unsigned long now = millis();
 
   // ——— 4) Safety timeout ————————————————————————————
-if (!activeJob && now - lastCmd > TIMEOUT_MS) {
+if (!activeJob && now - lastCmd > TIMEOUT_MS &&  t >=  40.0f) {
   Serial.println("DEBUG: Safety timeout — disabling heating");
   playTone(BUZZER_PIN, 400, 80, 5, 80, false); // 5 beeps for timeout
   controlRelay(0);            // Turn off relay
@@ -102,12 +108,6 @@ if (!activeJob && now - lastCmd > TIMEOUT_MS) {
   // Note: Do NOT clear CANHEAT here to allow future activation
   lastCmd = now;              // Reset lastCmd to prevent repeated triggering
 }
-  // ——— 5) Temperature read & checks —————————————————————
-  float t = readTemp();
-  checkTemperature(t);  // hard fault if sensor bad
-  AHT10Reading data = ReadAHT10();  // Fast as possible
-
-
 
   // ——— 6) Over-temp shutdown —————————————————————————
   if (cfg.maxTemp && t > cfg.maxTemp) {
