@@ -74,10 +74,12 @@ def launch_infernic():
             print(f"Port {infernic_port} is in use. Killing processes...")
             try:
                 subprocess.run(["sudo", "fuser", "-k", f"{infernic_port}/tcp"], check=True)
-                time.sleep(1)
+                print(f"Port {infernic_port} was in use and has been freed.")
             except subprocess.CalledProcessError as e:
-                return False, f"Failed to free port {infernic_port}: {e}"
-        
+                print(f"Port {infernic_port} not in use or no process to kill. Continuing anyway.")
+                # Do NOT fail — this is fine
+            time.sleep(1)
+
         print(f"Starting Infernic at {infernic_path}")
         if not os.path.exists(infernic_path):
             return False, f"File not found: {infernic_path}"
@@ -85,7 +87,7 @@ def launch_infernic():
             return False, f"Permission denied: Cannot read {infernic_path}"
         if not os.access(infernic_path, os.X_OK):
             print(f"Warning: {infernic_path} is not executable. Attempting to run anyway.")
-        
+
         try:
             infernic_process = subprocess.Popen(
                 ["python3", infernic_path],
@@ -191,15 +193,72 @@ if not Path(infernic_path).exists():
 async def root():
     local_ip = get_local_ip()
     status = "running" if is_infernic_running() else "not running"
-    button_label = "Restart Host Firmware" if is_infernic_running() else "Start Host Firmware"
+    button_label = "Restart Infernic-Host" if is_infernic_running() else "Start Infernic-Host"
     return HTMLResponse(f"""
-        <h2>Ignix UI</h2>
-        <p>Infernic status: {status}</p>
-        <form action="/start" method="post">
-            <button type="submit">{button_label}</button>
-        </form>
-        <p>Infernic expected at: http://{local_ip}:{infernic_port}</p>
-    """)
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ignix Controller</title>
+    <style>
+        body {{
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: #121212;
+            color: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }}
+        h2 {{
+            color: #ff6b00;
+            margin-bottom: 0.5em;
+        }}
+        p {{
+            font-size: 1.1em;
+        }}
+        form {{
+            margin-top: 1em;
+        }}
+        button {{
+            background: #ff6b00;
+            border: none;
+            padding: 0.75em 1.5em;
+            font-size: 1em;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }}
+        button:hover {{
+            background: #e65c00;
+        }}
+        .status {{
+            margin: 0.5em 0;
+            font-weight: bold;
+            color: { 'limegreen' if status == 'running' else 'crimson' };
+        }}
+        .footer {{
+            position: absolute;
+            bottom: 10px;
+            font-size: 0.9em;
+            opacity: 0.6;
+        }}
+    </style>
+</head>
+<body>
+    <h2>Ignix Interface</h2>
+    <p class="status">Infernic status: {status}</p>
+    <form action="/start" method="post">
+        <button type="submit">{button_label}</button>
+    </form>
+    <p class="footer">Infernic expected at: <a href="http://{local_ip}:{infernic_port}" style="color:#ffb366;">http://{local_ip}:{infernic_port}</a></p>
+</body>
+</html>
+""")
+
 
 @app.post("/start", response_class=HTMLResponse)
 async def start_infernic_route():
