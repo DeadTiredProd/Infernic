@@ -281,8 +281,25 @@ void handleLine(const char *ln, WiFiClient *client) {
     sendResponse("ACK: PID_CALIBRATE");
     runPIDAutotune(200.0f, 6, 5000, 2.0f);
     sendResponse("ACK: PID_CALIBRATE_DONE");
+
+    // M900: Set persistent option
+  } else if (strncmp(ln, "M900 ", 5) == 0) {
+    char temp[128];
+    strncpy(temp, ln + 5, sizeof(temp));
+    temp[sizeof(temp) - 1] = '\0';  // ensure null termination
+
+    char* key = strtok(temp, "=");
+    char* value = strtok(NULL, "=");
+    if (key && value) {
+        saveSetting(key, value);  // use Preferences to persist
+        sendResponse("ACK: setting_saved");
+    } else {
+        sendResponse("ERR: invalid_format");
+    }
+}
+
   // T001 F<frequency> D<toneDuration> C<count> B<delayBetween> R<repeat> : Play custom tone sequence
-  }else if (strncmp(ln, "T001", 4) == 0) {
+  else if (strncmp(ln, "T001", 4) == 0) {
     unsigned int frequency;
     unsigned long toneDuration, delayBetween;
     int count;
@@ -368,6 +385,15 @@ void handleLine(const char *ln, WiFiClient *client) {
   } else if (strcmp(ln, "G004") == 0) {
     sendResponse("ACK: restart");
     restartBoard();
+   // G050 : Enable buzzer
+  } else if (strcmp(ln, "G050") == 0) {
+    USE_BUZZER = true;
+    sendResponse("ACK: buzzer_enabled");
+
+  // G051 : Disable buzzer
+  } else if (strcmp(ln, "G051") == 0) {
+    USE_BUZZER = false;
+    sendResponse("ACK: buzzer_disabled");
 
   // G100 : Query current target temperature
   } else if (strcmp(ln, "G100") == 0) {

@@ -16,6 +16,7 @@ void setup() {
 
   Serial.begin(115200);
   Serial.println("Infernic v1.0 starting up...");
+  loadSettings(); // Load settings from Preferences
   SetupAHT10();
   initHeating();
   connectWiFi();

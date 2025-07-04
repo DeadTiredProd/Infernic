@@ -9,6 +9,24 @@
 
 
 
+#include <Preferences.h>
+Preferences prefs;
+
+void saveSetting(const char* key, const char* value) {
+    prefs.begin("settings", false);
+    prefs.putString(key, value);
+    prefs.end();
+}
+
+void loadSettings(){
+
+  prefs.begin("settings", true);
+  String buzzer = prefs.getString("USE_BUZZER", "true");
+  USE_BUZZER = (buzzer == "true");
+  prefs.end();
+
+}
+
 
 float getTargetTemp() {
   return targetTemp;
